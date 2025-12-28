@@ -61,6 +61,10 @@ uint8_t cursorCol = 3;  // Start cursor in middle
 bool winningCells[ROWS][COLS];
 uint8_t winner = EMPTY;
 
+// Score tracking
+uint16_t scorePlayer1 = 0;
+uint16_t scorePlayer2 = 0;
+
 // Button state
 unsigned long lastButtonPress[COLS];
 bool buttonState[COLS];
@@ -270,11 +274,23 @@ bool checkWin(uint8_t player) {
 
   if (winCount > 0) {
     winner = player;
+
+    // Add points to score
+    if (player == PLAYER1) {
+      scorePlayer1 += winCount;
+    } else {
+      scorePlayer2 += winCount;
+    }
+
     Serial.print("Joueur ");
     Serial.print(player);
     Serial.print(" gagne avec ");
     Serial.print(winCount);
     Serial.println(" puissance(s) quatre!");
+    Serial.print("Score: Joueur 1 = ");
+    Serial.print(scorePlayer1);
+    Serial.print(" | Joueur 2 = ");
+    Serial.println(scorePlayer2);
   }
 
   return winCount > 0;
