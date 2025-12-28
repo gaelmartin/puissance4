@@ -480,6 +480,14 @@ void handleButtonPress(uint8_t col) {
     scorePlayer1 = 0;
     scorePlayer2 = 0;
     currentPlayer = PLAYER1;  // Reset to player 1 for new big game
+    winner = EMPTY;
+    // Clear board
+    for (uint8_t r = 0; r < ROWS; r++) {
+      for (uint8_t c = 0; c < COLS; c++) {
+        board[r][c] = EMPTY;
+        winningCells[r][c] = false;
+      }
+    }
     Serial.println("Nouvelle partie!");
     Serial.println("Score reinitialise.");
     startModeSelection();
