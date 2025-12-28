@@ -206,7 +206,10 @@ void markWinningLine(uint8_t row, uint8_t col, int8_t dRow, int8_t dCol) {
 }
 
 // Check for a win from a position in a direction
+// Returns true only if at least 3 cells are not already marked as winning
 bool checkDirection(uint8_t row, uint8_t col, int8_t dRow, int8_t dCol, uint8_t player) {
+  uint8_t alreadyMarked = 0;
+
   for (int8_t i = 0; i < 4; i++) {
     int8_t r = row + i * dRow;
     int8_t c = col + i * dCol;
@@ -218,13 +221,19 @@ bool checkDirection(uint8_t row, uint8_t col, int8_t dRow, int8_t dCol, uint8_t 
     if (board[r][c] != player) {
       return false;
     }
+
+    if (winningCells[r][c]) {
+      alreadyMarked++;
+    }
   }
-  return true;
+
+  // Only count as new connect-4 if at most 1 cell already marked
+  return alreadyMarked <= 1;
 }
 
 // Check if the current player has won and mark ALL winning lines
 bool checkWin(uint8_t player) {
-  bool hasWon = false;
+  uint8_t winCount = 0;
 
   // Clear winning cells first
   for (uint8_t r = 0; r < ROWS; r++) {
@@ -239,31 +248,36 @@ bool checkWin(uint8_t player) {
       // Horizontal
       if (c <= COLS - 4 && checkDirection(r, c, 0, 1, player)) {
         markWinningLine(r, c, 0, 1);
-        hasWon = true;
+        winCount++;
       }
       // Vertical
       if (r <= ROWS - 4 && checkDirection(r, c, 1, 0, player)) {
         markWinningLine(r, c, 1, 0);
-        hasWon = true;
+        winCount++;
       }
       // Diagonal up-right
       if (r <= ROWS - 4 && c <= COLS - 4 && checkDirection(r, c, 1, 1, player)) {
         markWinningLine(r, c, 1, 1);
-        hasWon = true;
+        winCount++;
       }
       // Diagonal up-left
       if (r <= ROWS - 4 && c >= 3 && checkDirection(r, c, 1, -1, player)) {
         markWinningLine(r, c, 1, -1);
-        hasWon = true;
+        winCount++;
       }
     }
   }
 
-  if (hasWon) {
+  if (winCount > 0) {
     winner = player;
+    Serial.print("Joueur ");
+    Serial.print(player);
+    Serial.print(" gagne avec ");
+    Serial.print(winCount);
+    Serial.println(" puissance(s) quatre!");
   }
 
-  return hasWon;
+  return winCount > 0;
 }
 
 // Check if board is full (draw)
@@ -365,6 +379,10 @@ void animateDraw() {
 }
 
 void setup() {
+  // Initialize Serial
+  Serial.begin(9600);
+  Serial.println("Connect 4 - Pret!");
+
   // Initialize FastLED
   FastLED.addLeds<WS2812B, LED_PIN, GRB>(leds, NUM_LEDS);
   FastLED.setBrightness(200);  // Adjust brightness (0-255)
