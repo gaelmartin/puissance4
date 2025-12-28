@@ -384,9 +384,20 @@ void handleButtonPress(uint8_t col) {
     Serial.println("Score reinitialise.");
     resetGame();
   } else if (gameState == STATE_WIN || gameState == STATE_DRAW) {
-    // Show score display
-    gameState = STATE_SCORE;
-    scoreDisplayStart = millis();
+    // Check for grand winner immediately
+    if (scorePlayer1 >= POINTS_TO_WIN) {
+      gameState = STATE_GRAND_WIN;
+      winner = PLAYER1;
+      Serial.println("*** JOUEUR 1 GAGNE LA PARTIE! ***");
+    } else if (scorePlayer2 >= POINTS_TO_WIN) {
+      gameState = STATE_GRAND_WIN;
+      winner = PLAYER2;
+      Serial.println("*** JOUEUR 2 GAGNE LA PARTIE! ***");
+    } else {
+      // Show score display
+      gameState = STATE_SCORE;
+      scoreDisplayStart = millis();
+    }
   } else if (gameState == STATE_SCORE) {
     // Skip score display, start new game
     resetGame();
@@ -427,18 +438,7 @@ void displayScore() {
 
   // Check if score display time is over
   if (millis() - scoreDisplayStart >= SCORE_DISPLAY_TIME) {
-    // Check for grand winner
-    if (scorePlayer1 >= POINTS_TO_WIN) {
-      gameState = STATE_GRAND_WIN;
-      winner = PLAYER1;
-      Serial.println("*** JOUEUR 1 GAGNE LA PARTIE! ***");
-    } else if (scorePlayer2 >= POINTS_TO_WIN) {
-      gameState = STATE_GRAND_WIN;
-      winner = PLAYER2;
-      Serial.println("*** JOUEUR 2 GAGNE LA PARTIE! ***");
-    } else {
-      resetGame();
-    }
+    resetGame();
   }
 }
 
