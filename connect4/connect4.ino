@@ -1264,6 +1264,12 @@ void setup() {
     aiMode = true;
     Serial.println("*** MODE SOLO (AI) SELECTIONNE ***");
 
+    // Wait for button to be released before starting level selection
+    while (!digitalRead(BUTTON_START_PIN + 6)) {
+      delay(10);
+    }
+    delay(100);  // Extra delay after release
+
     // Start AI level selection
     startAILevelSelection();
   } else {
