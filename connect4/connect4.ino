@@ -117,7 +117,13 @@ void resetGame() {
     }
   }
 
-  currentPlayer = PLAYER1;
+  // Loser starts next game (if there was a winner)
+  // If draw, keep same player
+  if (winner != EMPTY) {
+    currentPlayer = (winner == PLAYER1) ? PLAYER2 : PLAYER1;
+  }
+  // On first game or after grand win reset, currentPlayer stays as is
+
   gameState = STATE_PLAYING;
   cursorCol = 3;
   winner = EMPTY;
