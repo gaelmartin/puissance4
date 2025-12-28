@@ -87,6 +87,11 @@ bool drawBlinkState = false;
 // Display durations
 #define SCORE_DISPLAY_TIME 3000
 #define WIN_DISPLAY_TIME   3000
+#define SCORE_HOLD_TIME    3000  // Time to hold button 3 to show score
+
+// Button 3 hold tracking for score display
+unsigned long button3HoldStart = 0;
+bool showingHoldScore = false;
 
 // Convert grid position (row, col) to LED index
 // Handles the zigzag pattern
@@ -483,6 +488,59 @@ void animateGrandWin() {
   }
 }
 
+// Check if button 3 is held to show score (only during play)
+void checkButton3Hold() {
+  bool btn3Pressed = !digitalRead(BUTTON_START_PIN + 2);  // Button 3 (index 2, pin 5)
+
+  if (gameState == STATE_PLAYING) {
+    if (btn3Pressed) {
+      if (button3HoldStart == 0) {
+        // Start tracking hold time
+        button3HoldStart = millis();
+      } else if (!showingHoldScore && (millis() - button3HoldStart >= SCORE_HOLD_TIME)) {
+        // Held long enough, show score
+        showingHoldScore = true;
+      }
+    } else {
+      // Button released
+      if (showingHoldScore) {
+        // Was showing score, go back to playing
+        showingHoldScore = false;
+        updateDisplay();
+      }
+      button3HoldStart = 0;
+    }
+  }
+}
+
+// Display score while holding button (same as displayScore but no auto-exit)
+void displayHoldScore() {
+  // Clear all LEDs
+  for (uint8_t i = 0; i < NUM_LEDS; i++) {
+    leds[i] = COLOR_OFF;
+  }
+
+  // Display Player 1 score on bottom rows (rows 0, 1, 2)
+  uint8_t p1Points = min(scorePlayer1, (uint16_t)COLS);
+  for (uint8_t col = 0; col < p1Points; col++) {
+    for (uint8_t row = 0; row < 3; row++) {
+      uint8_t ledIdx = getLedIndex(row, col);
+      leds[ledIdx] = COLOR_PLAYER1;
+    }
+  }
+
+  // Display Player 2 score on top rows (rows 3, 4, 5)
+  uint8_t p2Points = min(scorePlayer2, (uint16_t)COLS);
+  for (uint8_t col = 0; col < p2Points; col++) {
+    for (uint8_t row = 3; row < 6; row++) {
+      uint8_t ledIdx = getLedIndex(row, col);
+      leds[ledIdx] = COLOR_PLAYER2;
+    }
+  }
+
+  FastLED.show();
+}
+
 // Draw animation (alternating colors)
 void animateDraw() {
   unsigned long currentTime = millis();
@@ -551,26 +609,35 @@ void loop() {
     blinkState = !blinkState;
   }
 
-  // Read buttons
-  readButtons();
+  // Check button 3 hold for score display
+  checkButton3Hold();
+
+  // Read buttons (skip if showing hold score to avoid dropping piece)
+  if (!showingHoldScore) {
+    readButtons();
+  }
 
   // Update display based on game state
-  switch (gameState) {
-    case STATE_PLAYING:
-      updateDisplay();
-      break;
-    case STATE_WIN:
-      animateWin();
-      break;
-    case STATE_DRAW:
-      animateDraw();
-      break;
-    case STATE_SCORE:
-      displayScore();
-      break;
-    case STATE_GRAND_WIN:
-      animateGrandWin();
-      break;
+  if (showingHoldScore) {
+    displayHoldScore();
+  } else {
+    switch (gameState) {
+      case STATE_PLAYING:
+        updateDisplay();
+        break;
+      case STATE_WIN:
+        animateWin();
+        break;
+      case STATE_DRAW:
+        animateDraw();
+        break;
+      case STATE_SCORE:
+        displayScore();
+        break;
+      case STATE_GRAND_WIN:
+        animateGrandWin();
+        break;
+    }
   }
 
   delay(10);  // Small delay to prevent flickering
