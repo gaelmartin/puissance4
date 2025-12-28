@@ -119,15 +119,17 @@ void updateDisplay() {
     }
   }
 
-  // Show cursor on top row if playing
+  // Show blinking indicator on all playable columns (top row)
   if (gameState == STATE_PLAYING) {
-    uint8_t cursorLed = getLedIndex(ROWS - 1, cursorCol);
-    // Only show cursor if top cell is empty
-    if (board[ROWS - 1][cursorCol] == EMPTY) {
-      // Dim cursor color based on current player
-      CRGB cursorColor = (currentPlayer == PLAYER1) ? COLOR_PLAYER1 : COLOR_PLAYER2;
-      cursorColor.nscale8(blinkState ? 255 : 80);  // Blink effect
-      leds[cursorLed] = cursorColor;
+    CRGB cursorColor = (currentPlayer == PLAYER1) ? COLOR_PLAYER1 : COLOR_PLAYER2;
+    cursorColor.nscale8(blinkState ? 150 : 60);  // Blink effect (max 150)
+
+    for (uint8_t c = 0; c < COLS; c++) {
+      // Show on top row if column is not full
+      if (board[ROWS - 1][c] == EMPTY) {
+        uint8_t ledIdx = getLedIndex(ROWS - 1, c);
+        leds[ledIdx] = cursorColor;
+      }
     }
   }
 
