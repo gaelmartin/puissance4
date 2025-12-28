@@ -547,12 +547,6 @@ void displayModeSelection(uint8_t mode, bool blinkOff) {
     leds[i] = COLOR_OFF;
   }
 
-  // If blinking off, just show black
-  if (blinkOff) {
-    FastLED.show();
-    return;
-  }
-
   // Light up LEDs based on mode - triangular pattern starting from col 2
   // Mode 0: col 0 = 1 LED (white)
   // Mode 1: col 0 = 1 LED, col 1 = 1 LED
@@ -569,8 +563,19 @@ void displayModeSelection(uint8_t mode, bool blinkOff) {
     if (numRows > ROWS) numRows = ROWS;
     for (uint8_t row = 0; row < numRows; row++) {
       uint8_t ledIdx = getLedIndex(row, col);
-      // Mode 0 = white, others = blue
-      leds[ledIdx] = (mode == 0) ? COLOR_CURSOR : COLOR_MODE;
+      if (mode == 0) {
+        // Mode 0: white LED, blinks
+        if (!blinkOff) {
+          leds[ledIdx] = COLOR_CURSOR;
+        }
+      } else {
+        // Mode > 0: col 0 is always white (no blink), rest is blue (blinks)
+        if (col == 0) {
+          leds[ledIdx] = COLOR_CURSOR;  // Always on, no blink
+        } else if (!blinkOff) {
+          leds[ledIdx] = COLOR_MODE;  // Blue, blinks
+        }
+      }
     }
   }
 
