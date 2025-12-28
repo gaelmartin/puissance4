@@ -57,8 +57,9 @@ uint8_t currentPlayer = PLAYER1;
 uint8_t gameState = STATE_PLAYING;
 uint8_t cursorCol = 3;  // Start cursor in middle
 
-// Win tracking
-uint8_t winPositions[4][2];  // Store winning 4 positions [index][row,col]
+// Win tracking - use a grid to mark all winning positions
+bool winningCells[ROWS][COLS];
+uint8_t winner = EMPTY;
 
 // Button state
 unsigned long lastButtonPress[COLS];
@@ -86,16 +87,18 @@ uint8_t getLedIndex(uint8_t row, uint8_t col) {
 
 // Initialize the game
 void resetGame() {
-  // Clear board
+  // Clear board and winning cells
   for (uint8_t r = 0; r < ROWS; r++) {
     for (uint8_t c = 0; c < COLS; c++) {
       board[r][c] = EMPTY;
+      winningCells[r][c] = false;
     }
   }
 
   currentPlayer = PLAYER1;
   gameState = STATE_PLAYING;
   cursorCol = 3;
+  winner = EMPTY;
 
   updateDisplay();
 }
@@ -143,25 +146,22 @@ void animateWin() {
     lastWinBlinkTime = currentTime;
     winBlinkState = !winBlinkState;
 
-    // Set all LEDs based on board state
+    CRGB winnerColor = (winner == PLAYER1) ? COLOR_PLAYER1 : COLOR_PLAYER2;
+
+    // Set all LEDs based on board state, blink winning cells
     for (uint8_t r = 0; r < ROWS; r++) {
       for (uint8_t c = 0; c < COLS; c++) {
         uint8_t ledIdx = getLedIndex(r, c);
-        leds[ledIdx] = getCellColor(board[r][c]);
-      }
-    }
-
-    // Blink winning positions between green and player color
-    CRGB winnerColor = (board[winPositions[0][0]][winPositions[0][1]] == PLAYER1) ? COLOR_PLAYER1 : COLOR_PLAYER2;
-    for (uint8_t i = 0; i < 4; i++) {
-      uint8_t r = winPositions[i][0];
-      uint8_t c = winPositions[i][1];
-      uint8_t ledIdx = getLedIndex(r, c);
-
-      if (winBlinkState) {
-        leds[ledIdx] = CRGB::Green;
-      } else {
-        leds[ledIdx] = winnerColor;
+        if (winningCells[r][c]) {
+          // Blink winning positions between green and player color
+          if (winBlinkState) {
+            leds[ledIdx] = CRGB::Green;
+          } else {
+            leds[ledIdx] = winnerColor;
+          }
+        } else {
+          leds[ledIdx] = getCellColor(board[r][c]);
+        }
       }
     }
     FastLED.show();
@@ -196,10 +196,17 @@ void animateDrop(uint8_t col, uint8_t targetRow, uint8_t player) {
   }
 }
 
+// Mark a line of 4 as winning
+void markWinningLine(uint8_t row, uint8_t col, int8_t dRow, int8_t dCol) {
+  for (int8_t i = 0; i < 4; i++) {
+    int8_t r = row + i * dRow;
+    int8_t c = col + i * dCol;
+    winningCells[r][c] = true;
+  }
+}
+
 // Check for a win from a position in a direction
 bool checkDirection(uint8_t row, uint8_t col, int8_t dRow, int8_t dCol, uint8_t player) {
-  uint8_t count = 0;
-
   for (int8_t i = 0; i < 4; i++) {
     int8_t r = row + i * dRow;
     int8_t c = col + i * dCol;
@@ -208,34 +215,55 @@ bool checkDirection(uint8_t row, uint8_t col, int8_t dRow, int8_t dCol, uint8_t 
       return false;
     }
 
-    if (board[r][c] == player) {
-      winPositions[count][0] = r;
-      winPositions[count][1] = c;
-      count++;
-    } else {
+    if (board[r][c] != player) {
       return false;
     }
   }
-
-  return count == 4;
+  return true;
 }
 
-// Check if the current player has won
+// Check if the current player has won and mark ALL winning lines
 bool checkWin(uint8_t player) {
+  bool hasWon = false;
+
+  // Clear winning cells first
+  for (uint8_t r = 0; r < ROWS; r++) {
+    for (uint8_t c = 0; c < COLS; c++) {
+      winningCells[r][c] = false;
+    }
+  }
+
   // Check all possible starting positions and directions
   for (uint8_t r = 0; r < ROWS; r++) {
     for (uint8_t c = 0; c < COLS; c++) {
       // Horizontal
-      if (c <= COLS - 4 && checkDirection(r, c, 0, 1, player)) return true;
+      if (c <= COLS - 4 && checkDirection(r, c, 0, 1, player)) {
+        markWinningLine(r, c, 0, 1);
+        hasWon = true;
+      }
       // Vertical
-      if (r <= ROWS - 4 && checkDirection(r, c, 1, 0, player)) return true;
+      if (r <= ROWS - 4 && checkDirection(r, c, 1, 0, player)) {
+        markWinningLine(r, c, 1, 0);
+        hasWon = true;
+      }
       // Diagonal up-right
-      if (r <= ROWS - 4 && c <= COLS - 4 && checkDirection(r, c, 1, 1, player)) return true;
+      if (r <= ROWS - 4 && c <= COLS - 4 && checkDirection(r, c, 1, 1, player)) {
+        markWinningLine(r, c, 1, 1);
+        hasWon = true;
+      }
       // Diagonal up-left
-      if (r <= ROWS - 4 && c >= 3 && checkDirection(r, c, 1, -1, player)) return true;
+      if (r <= ROWS - 4 && c >= 3 && checkDirection(r, c, 1, -1, player)) {
+        markWinningLine(r, c, 1, -1);
+        hasWon = true;
+      }
     }
   }
-  return false;
+
+  if (hasWon) {
+    winner = player;
+  }
+
+  return hasWon;
 }
 
 // Check if board is full (draw)
