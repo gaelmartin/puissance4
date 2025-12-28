@@ -522,6 +522,11 @@ bool checkButton4Hold() {
       button4WasHeldForScore = false;
       return false;
     }
+  } else {
+    // Not in playing state - reset hold tracking without dropping
+    button4HoldStart = 0;
+    button4WasHeldForScore = false;
+    showingHoldScore = false;
   }
   return false;
 }
