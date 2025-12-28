@@ -29,6 +29,11 @@
 #define STATE_PLAYING   0
 #define STATE_WIN       1
 #define STATE_DRAW      2
+#define STATE_SCORE     3
+#define STATE_GRAND_WIN 4
+
+// Points to win the match
+#define POINTS_TO_WIN   7
 
 // Cell states
 #define EMPTY   0
@@ -73,9 +78,13 @@ bool buttonState[COLS];
 unsigned long lastBlinkTime = 0;
 unsigned long lastWinBlinkTime = 0;
 unsigned long lastDrawBlinkTime = 0;
+unsigned long scoreDisplayStart = 0;
 bool blinkState = false;
 bool winBlinkState = false;
 bool drawBlinkState = false;
+
+// Score display duration
+#define SCORE_DISPLAY_TIME 3000
 
 // Convert grid position (row, col) to LED index
 // Handles the zigzag pattern
@@ -367,9 +376,90 @@ void handleButtonPress(uint8_t col) {
     cursorCol = col;
     dropPiece(col);
     updateDisplay();
-  } else {
-    // Any button resets the game after win/draw
+  } else if (gameState == STATE_GRAND_WIN) {
+    // Reset everything for a new match
+    scorePlayer1 = 0;
+    scorePlayer2 = 0;
+    Serial.println("Nouvelle partie!");
+    Serial.println("Score reinitialise.");
     resetGame();
+  } else if (gameState == STATE_WIN || gameState == STATE_DRAW) {
+    // Show score display
+    gameState = STATE_SCORE;
+    scoreDisplayStart = millis();
+  } else if (gameState == STATE_SCORE) {
+    // Skip score display, start new game
+    resetGame();
+  }
+}
+
+// Display score as lines on the grid
+void displayScore() {
+  // Clear all LEDs
+  for (uint8_t i = 0; i < NUM_LEDS; i++) {
+    leds[i] = COLOR_OFF;
+  }
+
+  // Display Player 1 score on bottom rows
+  // Each point = one LED, fill row by row from bottom (row 0, 1, 2)
+  uint8_t p1Points = min(scorePlayer1, (uint16_t)(COLS * 3));  // Max 21 LEDs (3 rows)
+  for (uint8_t i = 0; i < p1Points; i++) {
+    uint8_t row = i / COLS;
+    uint8_t col = i % COLS;
+    if (row < 3) {
+      uint8_t ledIdx = getLedIndex(row, col);
+      leds[ledIdx] = COLOR_PLAYER1;
+    }
+  }
+
+  // Display Player 2 score on top rows (rows 3, 4, 5)
+  uint8_t p2Points = min(scorePlayer2, (uint16_t)(COLS * 3));  // Max 21 LEDs (3 rows)
+  for (uint8_t i = 0; i < p2Points; i++) {
+    uint8_t row = 5 - (i / COLS);  // Start from top (row 5)
+    uint8_t col = i % COLS;
+    if (row >= 3) {
+      uint8_t ledIdx = getLedIndex(row, col);
+      leds[ledIdx] = COLOR_PLAYER2;
+    }
+  }
+
+  FastLED.show();
+
+  // Check if score display time is over
+  if (millis() - scoreDisplayStart >= SCORE_DISPLAY_TIME) {
+    // Check for grand winner
+    if (scorePlayer1 >= POINTS_TO_WIN) {
+      gameState = STATE_GRAND_WIN;
+      winner = PLAYER1;
+      Serial.println("*** JOUEUR 1 GAGNE LA PARTIE! ***");
+    } else if (scorePlayer2 >= POINTS_TO_WIN) {
+      gameState = STATE_GRAND_WIN;
+      winner = PLAYER2;
+      Serial.println("*** JOUEUR 2 GAGNE LA PARTIE! ***");
+    } else {
+      resetGame();
+    }
+  }
+}
+
+// Grand winner animation
+void animateGrandWin() {
+  unsigned long currentTime = millis();
+  if (currentTime - lastWinBlinkTime >= BLINK_INTERVAL / 2) {
+    lastWinBlinkTime = currentTime;
+    winBlinkState = !winBlinkState;
+
+    CRGB winnerColor = (winner == PLAYER1) ? COLOR_PLAYER1 : COLOR_PLAYER2;
+
+    // Fill entire grid with winner color, blinking
+    for (uint8_t i = 0; i < NUM_LEDS; i++) {
+      if (winBlinkState) {
+        leds[i] = winnerColor;
+      } else {
+        leds[i] = CRGB::Green;
+      }
+    }
+    FastLED.show();
   }
 }
 
@@ -446,6 +536,12 @@ void loop() {
       break;
     case STATE_DRAW:
       animateDraw();
+      break;
+    case STATE_SCORE:
+      displayScore();
+      break;
+    case STATE_GRAND_WIN:
+      animateGrandWin();
       break;
   }
 
