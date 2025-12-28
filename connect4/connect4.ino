@@ -26,11 +26,12 @@
 #define ROWS 6
 
 // Game states
-#define STATE_PLAYING   0
-#define STATE_WIN       1
-#define STATE_DRAW      2
-#define STATE_SCORE     3
-#define STATE_GRAND_WIN 4
+#define STATE_MODE_SELECT 0
+#define STATE_PLAYING     1
+#define STATE_WIN         2
+#define STATE_DRAW        3
+#define STATE_SCORE       4
+#define STATE_GRAND_WIN   5
 
 // Points to win the match
 #define POINTS_TO_WIN   7
@@ -95,6 +96,29 @@ bool showingHoldScore = false;
 bool button4WasHeldForScore = false;  // Track if button was held long enough for score
 bool button4Blocked = false;  // Block button 4 after state transitions
 
+// Game mode / difficulty settings
+#define MODE_SELECT_TIMEOUT 3000  // 3 seconds to choose mode
+#define MODE_CONFIRM_TIME   1000  // 1 second to confirm mode selection
+uint8_t gameMode = 0;  // 0-6, current difficulty level
+unsigned long modeSelectStart = 0;  // When mode selection started
+unsigned long modeConfirmStart = 0;  // When mode was selected (for confirmation display)
+bool modeConfirmed = false;  // Whether a mode has been selected
+
+// Time limits for each mode (in milliseconds), 0 = no limit
+const uint16_t modeTimes[7] = {0, 10000, 8000, 6000, 4000, 3000, 2000};
+
+// Turn timer
+unsigned long turnStartTime = 0;  // When current player's turn started
+
+// Blue color for mode display
+#define COLOR_MODE CRGB::Blue
+
+// Blink speed settings
+#define BLINK_NORMAL    300   // Normal blink interval
+#define BLINK_FAST      150   // Fast blink when 50% time left
+#define BLINK_FASTER    80    // Faster blink when 25% time left
+#define BLINK_URGENT    40    // Urgent blink when 10% time left
+
 // Convert grid position (row, col) to LED index
 // Handles the zigzag pattern
 uint8_t getLedIndex(uint8_t row, uint8_t col) {
@@ -137,6 +161,33 @@ CRGB getCellColor(uint8_t cellState) {
     case PLAYER1: return COLOR_PLAYER1;
     case PLAYER2: return COLOR_PLAYER2;
     default:      return COLOR_OFF;
+  }
+}
+
+// Calculate blink interval based on remaining time
+uint16_t getBlinkInterval() {
+  if (gameMode == 0 || gameState != STATE_PLAYING) {
+    return BLINK_NORMAL;  // No timer, normal blink
+  }
+
+  unsigned long elapsed = millis() - turnStartTime;
+  uint16_t timeLimit = modeTimes[gameMode];
+
+  if (elapsed >= timeLimit) {
+    return BLINK_URGENT;  // Time's up!
+  }
+
+  unsigned long remaining = timeLimit - elapsed;
+  uint16_t percent = (remaining * 100) / timeLimit;
+
+  if (percent <= 10) {
+    return BLINK_URGENT;   // Last 10%
+  } else if (percent <= 25) {
+    return BLINK_FASTER;   // Last 25%
+  } else if (percent <= 50) {
+    return BLINK_FAST;     // Last 50%
+  } else {
+    return BLINK_NORMAL;   // More than 50% left
   }
 }
 
@@ -412,18 +463,25 @@ void readButtons() {
 
 // Handle a button press
 void handleButtonPress(uint8_t col) {
-  if (gameState == STATE_PLAYING) {
+  if (gameState == STATE_MODE_SELECT) {
+    // Select mode based on button (0-6)
+    if (!modeConfirmed) {
+      selectMode(col);
+    }
+  } else if (gameState == STATE_PLAYING) {
     // Move cursor to this column and drop piece
     cursorCol = col;
     dropPiece(col);
+    turnStartTime = millis();  // Reset timer for next player
     updateDisplay();
   } else if (gameState == STATE_GRAND_WIN) {
-    // Reset everything for a new match
+    // Reset everything for a new match - go to mode selection
     scorePlayer1 = 0;
     scorePlayer2 = 0;
+    currentPlayer = PLAYER1;  // Reset to player 1 for new big game
     Serial.println("Nouvelle partie!");
     Serial.println("Score reinitialise.");
-    resetGame();
+    startModeSelection();
   } else if (gameState == STATE_WIN || gameState == STATE_DRAW) {
     // Check for grand winner immediately
     if (scorePlayer1 >= POINTS_TO_WIN) {
@@ -442,6 +500,7 @@ void handleButtonPress(uint8_t col) {
   } else if (gameState == STATE_SCORE) {
     // Skip score display, start new game
     resetGame();
+    turnStartTime = millis();  // Start timer for new round
   }
 }
 
@@ -477,6 +536,119 @@ void displayScore() {
   // Check if score display time is over
   if (millis() - scoreDisplayStart >= SCORE_DISPLAY_TIME) {
     resetGame();
+    turnStartTime = millis();  // Reset timer for new round
+  }
+}
+
+// Display mode selection screen
+void displayModeSelection(uint8_t mode, bool blinkOff) {
+  // Clear all LEDs
+  for (uint8_t i = 0; i < NUM_LEDS; i++) {
+    leds[i] = COLOR_OFF;
+  }
+
+  // If blinking off, just show black
+  if (blinkOff) {
+    FastLED.show();
+    return;
+  }
+
+  // Light up LEDs based on mode - triangular pattern with selected mode as tallest
+  // Mode 0: LED at col 0, row 0 (just 1 LED)
+  // Mode 1: LED at col 1, with 2 rows (col 0 has 1 row)
+  // Mode 2: LED at col 2 with 3 rows, col 1 has 2 rows, col 0 has 1 row
+  // etc.
+  for (uint8_t col = 0; col <= mode; col++) {
+    uint8_t numRows = col + 1;  // col 0 = 1 row, col 1 = 2 rows, etc.
+    if (numRows > ROWS) numRows = ROWS;
+    for (uint8_t row = 0; row < numRows; row++) {
+      uint8_t ledIdx = getLedIndex(row, col);
+      leds[ledIdx] = COLOR_MODE;
+    }
+  }
+
+  FastLED.show();
+}
+
+// Start mode selection process
+void startModeSelection() {
+  gameState = STATE_MODE_SELECT;
+  modeSelectStart = millis();
+  modeConfirmed = false;
+  gameMode = 0;  // Default to mode 0
+  displayModeSelection(0);
+}
+
+// Handle mode selection timeout and confirmation
+void handleModeSelection() {
+  unsigned long currentTime = millis();
+
+  if (modeConfirmed) {
+    // Mode has been selected, wait for confirmation time
+    if (currentTime - modeConfirmStart >= MODE_CONFIRM_TIME) {
+      // Start the game
+      gameState = STATE_PLAYING;
+      turnStartTime = millis();
+      updateDisplay();
+    }
+  } else {
+    // Check for timeout - default to mode 0
+    if (currentTime - modeSelectStart >= MODE_SELECT_TIMEOUT) {
+      gameMode = 0;
+      modeConfirmed = true;
+      modeConfirmStart = millis();
+      displayModeSelection(0);
+    }
+  }
+}
+
+// Select a mode (called when button pressed during mode selection)
+void selectMode(uint8_t mode) {
+  if (mode <= 6) {
+    gameMode = mode;
+    modeConfirmed = true;
+    modeConfirmStart = millis();
+    displayModeSelection(mode);
+    Serial.print("Mode ");
+    Serial.print(mode);
+    Serial.print(" selectionne - ");
+    if (mode == 0) {
+      Serial.println("Pas de limite de temps");
+    } else {
+      Serial.print("Limite: ");
+      Serial.print(modeTimes[mode] / 1000);
+      Serial.println(" secondes");
+    }
+  }
+}
+
+// Check turn timer and auto-drop if expired
+void checkTurnTimer() {
+  if (gameMode == 0 || gameState != STATE_PLAYING) return;  // No timer in mode 0
+
+  unsigned long currentTime = millis();
+  uint16_t timeLimit = modeTimes[gameMode];
+
+  if (currentTime - turnStartTime >= timeLimit) {
+    // Time expired - choose random free column
+    uint8_t freeColumns[COLS];
+    uint8_t freeCount = 0;
+
+    for (uint8_t c = 0; c < COLS; c++) {
+      if (board[ROWS - 1][c] == EMPTY) {
+        freeColumns[freeCount++] = c;
+      }
+    }
+
+    if (freeCount > 0) {
+      // Pick random column
+      uint8_t randomCol = freeColumns[random(freeCount)];
+      Serial.print("Temps ecoule! Colonne aleatoire: ");
+      Serial.println(randomCol + 1);
+      dropPiece(randomCol);
+      turnStartTime = millis();  // Reset timer for next player
+      updateDisplay();
+    }
   }
 }
 
@@ -629,8 +801,8 @@ void setup() {
     buttonState[i] = false;
   }
 
-  // Start game
-  resetGame();
+  // Initialize random seed
+  randomSeed(analogRead(0));
 
   // Startup animation - alternate yellow and red
   for (uint8_t i = 0; i < NUM_LEDS; i++) {
@@ -640,19 +812,23 @@ void setup() {
     leds[i] = COLOR_OFF;
   }
 
-  // Clear all LEDs and reset blink state before starting game
+  // Clear all LEDs and reset blink state
   for (uint8_t i = 0; i < NUM_LEDS; i++) {
     leds[i] = COLOR_OFF;
   }
-  blinkState = false;  // Start with blink off so top row is dark
+  blinkState = false;
   FastLED.show();
+
+  // Start with mode selection
+  startModeSelection();
 }
 
 void loop() {
   unsigned long currentTime = millis();
 
-  // Handle blink timing for cursor
-  if (currentTime - lastBlinkTime >= BLINK_INTERVAL) {
+  // Handle blink timing for cursor (dynamic speed based on timer)
+  uint16_t currentBlinkInterval = getBlinkInterval();
+  if (currentTime - lastBlinkTime >= currentBlinkInterval) {
     lastBlinkTime = currentTime;
     blinkState = !blinkState;
   }
@@ -681,11 +857,17 @@ void loop() {
     }
   }
 
+  // Check turn timer for auto-drop
+  checkTurnTimer();
+
   // Update display based on game state
   if (showingHoldScore) {
     displayHoldScore();
   } else {
     switch (gameState) {
+      case STATE_MODE_SELECT:
+        handleModeSelection();
+        break;
       case STATE_PLAYING:
         updateDisplay();
         break;
