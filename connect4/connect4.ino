@@ -316,7 +316,7 @@ bool dropPiece(uint8_t col) {
   }
 
   // Switch player
-  currentPlayer = (currentPlayer == PLAYER1) ? PLAYER2 : PLAYER1;
+  currentPlayer = (currentPlayer == PLAYER1) ? PLAYER2 : PLAYER1;//test
 
   return true;
 }
