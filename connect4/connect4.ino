@@ -489,7 +489,8 @@ void animateGrandWin() {
 }
 
 // Check if button 3 is held to show score (only during play)
-void checkButton3Hold() {
+// Returns true if button 3 is being held (to block normal button processing)
+bool checkButton3Hold() {
   bool btn3Pressed = !digitalRead(BUTTON_START_PIN + 2);  // Button 3 (index 2, pin 5)
 
   if (gameState == STATE_PLAYING) {
@@ -497,10 +498,12 @@ void checkButton3Hold() {
       if (button3HoldStart == 0) {
         // Start tracking hold time
         button3HoldStart = millis();
-      } else if (!showingHoldScore && (millis() - button3HoldStart >= SCORE_HOLD_TIME)) {
+      } else if (millis() - button3HoldStart >= SCORE_HOLD_TIME) {
         // Held long enough, show score
         showingHoldScore = true;
       }
+      // Block normal button processing while button 3 is held
+      return true;
     } else {
       // Button released
       if (showingHoldScore) {
@@ -511,6 +514,7 @@ void checkButton3Hold() {
       button3HoldStart = 0;
     }
   }
+  return false;
 }
 
 // Display score while holding button (same as displayScore but no auto-exit)
@@ -610,10 +614,10 @@ void loop() {
   }
 
   // Check button 3 hold for score display
-  checkButton3Hold();
+  bool button3Held = checkButton3Hold();
 
-  // Read buttons (skip if showing hold score to avoid dropping piece)
-  if (!showingHoldScore) {
+  // Read buttons (skip if button 3 is held to avoid dropping piece)
+  if (!button3Held) {
     readButtons();
   }
 
