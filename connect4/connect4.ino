@@ -98,7 +98,7 @@ bool button4Blocked = false;  // Block button 4 after state transitions
 
 // Game mode / difficulty settings
 #define MODE_SELECT_TIMEOUT 3000  // 3 seconds to choose mode
-#define MODE_CONFIRM_TIME   1000  // 1 second to confirm mode selection
+#define MODE_CONFIRM_TIME   2000  // 2 seconds to confirm mode selection (blinking)
 uint8_t gameMode = 0;  // 0-6, current difficulty level
 unsigned long modeSelectStart = 0;  // When mode selection started
 unsigned long modeConfirmStart = 0;  // When mode was selected (for confirmation display)
@@ -553,13 +553,19 @@ void displayModeSelection(uint8_t mode, bool blinkOff) {
     return;
   }
 
-  // Light up LEDs based on mode - triangular pattern with selected mode as tallest
-  // Mode 0: LED at col 0, row 0 (just 1 LED)
-  // Mode 1: LED at col 1, with 2 rows (col 0 has 1 row)
-  // Mode 2: LED at col 2 with 3 rows, col 1 has 2 rows, col 0 has 1 row
+  // Light up LEDs based on mode - triangular pattern starting from col 2
+  // Mode 0: col 0 = 1 LED
+  // Mode 1: col 0 = 1 LED, col 1 = 1 LED
+  // Mode 2: col 0 = 1 LED, col 1 = 1 LED, col 2 = 2 LEDs
+  // Mode 3: col 0 = 1 LED, col 1 = 1 LED, col 2 = 2 LEDs, col 3 = 3 LEDs
   // etc.
   for (uint8_t col = 0; col <= mode; col++) {
-    uint8_t numRows = col + 1;  // col 0 = 1 row, col 1 = 2 rows, etc.
+    uint8_t numRows;
+    if (col <= 1) {
+      numRows = 1;  // col 0 and 1 always have 1 LED
+    } else {
+      numRows = col;  // col 2 = 2, col 3 = 3, etc.
+    }
     if (numRows > ROWS) numRows = ROWS;
     for (uint8_t row = 0; row < numRows; row++) {
       uint8_t ledIdx = getLedIndex(row, col);
@@ -576,7 +582,7 @@ void startModeSelection() {
   modeSelectStart = millis();
   modeConfirmed = false;
   gameMode = 0;  // Default to mode 0
-  displayModeSelection(0);
+  displayModeSelection(0, false);
 }
 
 // Handle mode selection timeout and confirmation
@@ -584,12 +590,16 @@ void handleModeSelection() {
   unsigned long currentTime = millis();
 
   if (modeConfirmed) {
-    // Mode has been selected, wait for confirmation time
+    // Mode has been selected, blink for confirmation time
     if (currentTime - modeConfirmStart >= MODE_CONFIRM_TIME) {
       // Start the game
       gameState = STATE_PLAYING;
       turnStartTime = millis();
+      blinkState = false;
       updateDisplay();
+    } else {
+      // Blink the mode display during confirmation
+      displayModeSelection(gameMode, !blinkState);
     }
   } else {
     // Check for timeout - default to mode 0
@@ -597,7 +607,7 @@ void handleModeSelection() {
       gameMode = 0;
       modeConfirmed = true;
       modeConfirmStart = millis();
-      displayModeSelection(0);
+      displayModeSelection(0, false);
     }
   }
 }
@@ -608,7 +618,7 @@ void selectMode(uint8_t mode) {
     gameMode = mode;
     modeConfirmed = true;
     modeConfirmStart = millis();
-    displayModeSelection(mode);
+    displayModeSelection(mode, false);
     Serial.print("Mode ");
     Serial.print(mode);
     Serial.print(" selectionne - ");
