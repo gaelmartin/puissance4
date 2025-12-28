@@ -109,6 +109,7 @@ const uint16_t modeTimes[7] = {0, 10000, 8000, 6000, 4000, 3000, 2000};
 
 // Turn timer
 unsigned long turnStartTime = 0;  // When current player's turn started
+unsigned long scorePauseStart = 0;  // When score display started (to pause timer)
 
 // Blue color for mode display
 #define COLOR_MODE CRGB::Blue
@@ -640,7 +641,7 @@ void selectMode(uint8_t mode) {
 
 // Check turn timer and auto-drop if expired
 void checkTurnTimer() {
-  if (gameMode == 0 || gameState != STATE_PLAYING) return;  // No timer in mode 0
+  if (gameMode == 0 || gameState != STATE_PLAYING || showingHoldScore) return;  // No timer in mode 0 or when showing score
 
   unsigned long currentTime = millis();
   uint16_t timeLimit = modeTimes[gameMode];
@@ -710,7 +711,11 @@ bool checkButton4Hold() {
         button4WasHeldForScore = false;
       } else if (millis() - button4HoldStart >= SCORE_HOLD_TIME) {
         // Held long enough, show score
-        showingHoldScore = true;
+        if (!showingHoldScore) {
+          // Just started showing score, record pause time
+          showingHoldScore = true;
+          scorePauseStart = millis();
+        }
         button4WasHeldForScore = true;
       }
       // Block button 4 processing while it's pressed in playing state
@@ -719,6 +724,9 @@ bool checkButton4Hold() {
       // Button released in playing state
       if (showingHoldScore) {
         // Was showing score, go back to playing
+        // Adjust turn start time to account for pause duration
+        unsigned long pauseDuration = millis() - scorePauseStart;
+        turnStartTime += pauseDuration;
         showingHoldScore = false;
         updateDisplay();
       } else if (button4HoldStart > 0 && !button4WasHeldForScore) {
