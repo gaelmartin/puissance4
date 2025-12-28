@@ -87,12 +87,13 @@ bool drawBlinkState = false;
 // Display durations
 #define SCORE_DISPLAY_TIME 3000
 #define WIN_DISPLAY_TIME   3000
-#define SCORE_HOLD_TIME    3000  // Time to hold button 3 to show score
+#define SCORE_HOLD_TIME    2000  // Time to hold button 4 to show score
 
 // Button 4 hold tracking for score display
 unsigned long button4HoldStart = 0;
 bool showingHoldScore = false;
 bool button4WasHeldForScore = false;  // Track if button was held long enough for score
+bool button4Blocked = false;  // Block button 4 after state transitions
 
 // Convert grid position (row, col) to LED index
 // Handles the zigzag pattern
@@ -490,9 +491,17 @@ void animateGrandWin() {
 }
 
 // Check if button 4 is held to show score (only during play)
-// Returns true if button 4 is pressed (to block normal button 4 processing)
+// Returns true if button 4 should be blocked from normal processing
 bool checkButton4Hold() {
   bool btn4Pressed = !digitalRead(BUTTON_START_PIN + 3);  // Button 4 (index 3, pin 6)
+
+  // If button 4 is blocked (after returning from non-playing state), wait for release
+  if (button4Blocked) {
+    if (!btn4Pressed) {
+      button4Blocked = false;
+    }
+    return true;  // Keep blocking until released
+  }
 
   if (gameState == STATE_PLAYING) {
     if (btn4Pressed) {
@@ -505,16 +514,16 @@ bool checkButton4Hold() {
         showingHoldScore = true;
         button4WasHeldForScore = true;
       }
-      // Block button 4 processing while it's pressed
+      // Block button 4 processing while it's pressed in playing state
       return true;
     } else {
-      // Button released
+      // Button released in playing state
       if (showingHoldScore) {
         // Was showing score, go back to playing
         showingHoldScore = false;
         updateDisplay();
       } else if (button4HoldStart > 0 && !button4WasHeldForScore) {
-        // Was pressed but released before 3 seconds - drop piece now
+        // Was pressed but released before 2 seconds - drop piece now
         dropPiece(3);  // Column 4 (index 3)
         updateDisplay();
       }
@@ -523,12 +532,17 @@ bool checkButton4Hold() {
       return false;
     }
   } else {
-    // Not in playing state - reset hold tracking without dropping
+    // Not in playing state - let button 4 work normally for state transitions
+    // But set blocked flag so it won't drop a piece when we return to playing
+    if (btn4Pressed) {
+      button4Blocked = true;
+    }
     button4HoldStart = 0;
     button4WasHeldForScore = false;
     showingHoldScore = false;
+    // Return false to allow normal button processing in non-playing states
+    return false;
   }
-  return false;
 }
 
 // Display score while holding button (same as displayScore but no auto-exit)
