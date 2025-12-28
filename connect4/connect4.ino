@@ -157,6 +157,25 @@ void updateDisplay() {
 // Animate winning positions
 void animateWin() {
   unsigned long currentTime = millis();
+
+  // Check if display time is over - auto transition to score
+  if (currentTime - winAnimationStart >= WIN_DISPLAY_TIME) {
+    // Check for grand winner
+    if (scorePlayer1 >= POINTS_TO_WIN) {
+      gameState = STATE_GRAND_WIN;
+      winner = PLAYER1;
+      Serial.println("*** JOUEUR 1 GAGNE LA PARTIE! ***");
+    } else if (scorePlayer2 >= POINTS_TO_WIN) {
+      gameState = STATE_GRAND_WIN;
+      winner = PLAYER2;
+      Serial.println("*** JOUEUR 2 GAGNE LA PARTIE! ***");
+    } else {
+      gameState = STATE_SCORE;
+      scoreDisplayStart = millis();
+    }
+    return;
+  }
+
   if (currentTime - lastWinBlinkTime >= BLINK_INTERVAL) {
     lastWinBlinkTime = currentTime;
     winBlinkState = !winBlinkState;
@@ -467,6 +486,14 @@ void animateGrandWin() {
 // Draw animation (alternating colors)
 void animateDraw() {
   unsigned long currentTime = millis();
+
+  // Check if display time is over - auto transition to score
+  if (currentTime - winAnimationStart >= WIN_DISPLAY_TIME) {
+    gameState = STATE_SCORE;
+    scoreDisplayStart = millis();
+    return;
+  }
+
   if (currentTime - lastDrawBlinkTime >= BLINK_INTERVAL * 2) {
     lastDrawBlinkTime = currentTime;
     drawBlinkState = !drawBlinkState;
