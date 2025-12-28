@@ -79,12 +79,14 @@ unsigned long lastBlinkTime = 0;
 unsigned long lastWinBlinkTime = 0;
 unsigned long lastDrawBlinkTime = 0;
 unsigned long scoreDisplayStart = 0;
+unsigned long winAnimationStart = 0;
 bool blinkState = false;
 bool winBlinkState = false;
 bool drawBlinkState = false;
 
-// Score display duration
+// Display durations
 #define SCORE_DISPLAY_TIME 3000
+#define WIN_DISPLAY_TIME   3000
 
 // Convert grid position (row, col) to LED index
 // Handles the zigzag pattern
@@ -331,12 +333,14 @@ bool dropPiece(uint8_t col) {
   // Check for win
   if (checkWin(currentPlayer)) {
     gameState = STATE_WIN;
+    winAnimationStart = millis();
     return true;
   }
 
   // Check for draw
   if (checkDraw()) {
     gameState = STATE_DRAW;
+    winAnimationStart = millis();
     return true;
   }
 
