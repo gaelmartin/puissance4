@@ -152,14 +152,19 @@ void updateDisplay() {
 
   // Show blinking indicator on all playable columns (top row)
   if (gameState == STATE_PLAYING) {
-    CRGB cursorColor = (currentPlayer == PLAYER1) ? COLOR_PLAYER1 : COLOR_PLAYER2;
-    cursorColor.nscale8(blinkState ? 150 : 60);  // Blink effect (max 150)
-
     for (uint8_t c = 0; c < COLS; c++) {
       // Show on top row if column is not full
       if (board[ROWS - 1][c] == EMPTY) {
         uint8_t ledIdx = getLedIndex(ROWS - 1, c);
-        leds[ledIdx] = cursorColor;
+        if (blinkState) {
+          // Dim player color when blinking on
+          CRGB cursorColor = (currentPlayer == PLAYER1) ? COLOR_PLAYER1 : COLOR_PLAYER2;
+          cursorColor.nscale8(100);  // Dimmer than static pieces
+          leds[ledIdx] = cursorColor;
+        } else {
+          // Off when blinking off
+          leds[ledIdx] = COLOR_OFF;
+        }
       }
     }
   }
@@ -627,15 +632,20 @@ void setup() {
   // Start game
   resetGame();
 
-  // Startup animation
+  // Startup animation - alternate yellow and red
   for (uint8_t i = 0; i < NUM_LEDS; i++) {
-    leds[i] = CRGB::Green;
+    leds[i] = (i % 2 == 0) ? COLOR_PLAYER2 : COLOR_PLAYER1;  // Yellow/Red alternating
     FastLED.show();
     delay(30);
     leds[i] = COLOR_OFF;
   }
 
-  updateDisplay();
+  // Clear all LEDs and reset blink state before starting game
+  for (uint8_t i = 0; i < NUM_LEDS; i++) {
+    leds[i] = COLOR_OFF;
+  }
+  blinkState = false;  // Start with blink off so top row is dark
+  FastLED.show();
 }
 
 void loop() {
