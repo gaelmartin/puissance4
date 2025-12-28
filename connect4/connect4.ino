@@ -1242,6 +1242,21 @@ void setup() {
   // Initialize random seed
   randomSeed(analogRead(0));
 
+  // Startup animation - alternate yellow and red (same for both modes)
+  for (uint8_t i = 0; i < NUM_LEDS; i++) {
+    leds[i] = (i % 2 == 0) ? COLOR_PLAYER2 : COLOR_PLAYER1;  // Yellow/Red alternating
+    FastLED.show();
+    delay(30);
+    leds[i] = COLOR_OFF;
+  }
+
+  // Clear all LEDs and reset blink state
+  for (uint8_t i = 0; i < NUM_LEDS; i++) {
+    leds[i] = COLOR_OFF;
+  }
+  blinkState = false;
+  FastLED.show();
+
   // Check if button 7 is pressed at startup for AI mode
   delay(100);  // Small delay to stabilize button reading
   if (!digitalRead(BUTTON_START_PIN + 6)) {  // Button 7 (pin 9) pressed
@@ -1249,47 +1264,11 @@ void setup() {
     aiMode = true;
     Serial.println("*** MODE SOLO (AI) SELECTIONNE ***");
 
-    // Special AI mode animation - purple flash
-    for (uint8_t i = 0; i < 3; i++) {
-      for (uint8_t j = 0; j < NUM_LEDS; j++) {
-        leds[j] = CRGB::Purple;
-      }
-      FastLED.show();
-      delay(200);
-      for (uint8_t j = 0; j < NUM_LEDS; j++) {
-        leds[j] = COLOR_OFF;
-      }
-      FastLED.show();
-      delay(200);
-    }
-
-    // Clear all LEDs and reset blink state
-    for (uint8_t i = 0; i < NUM_LEDS; i++) {
-      leds[i] = COLOR_OFF;
-    }
-    blinkState = false;
-    FastLED.show();
-
     // Start AI level selection
     startAILevelSelection();
   } else {
     // Normal 2-player mode
     aiMode = false;
-
-    // Startup animation - alternate yellow and red
-    for (uint8_t i = 0; i < NUM_LEDS; i++) {
-      leds[i] = (i % 2 == 0) ? COLOR_PLAYER2 : COLOR_PLAYER1;  // Yellow/Red alternating
-      FastLED.show();
-      delay(30);
-      leds[i] = COLOR_OFF;
-    }
-
-    // Clear all LEDs and reset blink state
-    for (uint8_t i = 0; i < NUM_LEDS; i++) {
-      leds[i] = COLOR_OFF;
-    }
-    blinkState = false;
-    FastLED.show();
 
     // Start with mode selection
     startModeSelection();
