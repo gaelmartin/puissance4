@@ -325,7 +325,7 @@ void animateDraw() {
 void setup() {
   // Initialize FastLED
   FastLED.addLeds<WS2812B, LED_PIN, GRB>(leds, NUM_LEDS);
-  FastLED.setBrightness(50);  // Adjust brightness (0-255)
+  FastLED.setBrightness(200);  // Adjust brightness (0-255)
 
   // Initialize button pins with internal pull-up
   for (uint8_t i = 0; i < COLS; i++) {
