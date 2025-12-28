@@ -66,7 +66,9 @@ bool buttonState[COLS];
 
 // Animation timing
 unsigned long lastBlinkTime = 0;
+unsigned long lastWinBlinkTime = 0;
 bool blinkState = false;
+bool winBlinkState = false;
 
 // Convert grid position (row, col) to LED index
 // Handles the zigzag pattern
@@ -133,21 +135,28 @@ void updateDisplay() {
 // Animate winning positions
 void animateWin() {
   unsigned long currentTime = millis();
-  if (currentTime - lastBlinkTime >= BLINK_INTERVAL) {
-    lastBlinkTime = currentTime;
-    blinkState = !blinkState;
+  if (currentTime - lastWinBlinkTime >= BLINK_INTERVAL) {
+    lastWinBlinkTime = currentTime;
+    winBlinkState = !winBlinkState;
 
-    // Update display normally
-    updateDisplay();
+    // Set all LEDs based on board state
+    for (uint8_t r = 0; r < ROWS; r++) {
+      for (uint8_t c = 0; c < COLS; c++) {
+        uint8_t ledIdx = getLedIndex(r, c);
+        leds[ledIdx] = getCellColor(board[r][c]);
+      }
+    }
 
-    // Blink winning positions
+    // Blink winning positions between white and off
     for (uint8_t i = 0; i < 4; i++) {
       uint8_t r = winPositions[i][0];
       uint8_t c = winPositions[i][1];
       uint8_t ledIdx = getLedIndex(r, c);
 
-      if (blinkState) {
+      if (winBlinkState) {
         leds[ledIdx] = COLOR_CURSOR;  // Flash white
+      } else {
+        leds[ledIdx] = COLOR_OFF;  // Turn off
       }
     }
     FastLED.show();
