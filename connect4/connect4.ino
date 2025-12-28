@@ -490,7 +490,7 @@ void animateGrandWin() {
 }
 
 // Check if button 4 is held to show score (only during play)
-// Returns true only if showing score (to block normal button processing)
+// Returns true if button 4 is pressed (to block normal button 4 processing)
 bool checkButton4Hold() {
   bool btn4Pressed = !digitalRead(BUTTON_START_PIN + 3);  // Button 4 (index 3, pin 6)
 
@@ -499,24 +499,31 @@ bool checkButton4Hold() {
       if (button4HoldStart == 0) {
         // Start tracking hold time
         button4HoldStart = millis();
+        button4WasHeldForScore = false;
       } else if (millis() - button4HoldStart >= SCORE_HOLD_TIME) {
         // Held long enough, show score
         showingHoldScore = true;
         button4WasHeldForScore = true;
       }
+      // Block button 4 processing while it's pressed
+      return true;
     } else {
       // Button released
       if (showingHoldScore) {
         // Was showing score, go back to playing
         showingHoldScore = false;
         updateDisplay();
+      } else if (button4HoldStart > 0 && !button4WasHeldForScore) {
+        // Was pressed but released before 3 seconds - drop piece now
+        dropPiece(3);  // Column 4 (index 3)
+        updateDisplay();
       }
       button4HoldStart = 0;
       button4WasHeldForScore = false;
+      return false;
     }
   }
-  // Only block button processing if actually showing score
-  return showingHoldScore;
+  return false;
 }
 
 // Display score while holding button (same as displayScore but no auto-exit)
@@ -615,12 +622,28 @@ void loop() {
     blinkState = !blinkState;
   }
 
-  // Check button 4 hold for score display
-  bool button4ShowingScore = checkButton4Hold();
+  // Check button 4 hold for score display (must be before readButtons)
+  bool button4Held = checkButton4Hold();
 
-  // Read buttons (skip only if showing score)
-  if (!button4ShowingScore) {
+  // Read buttons, but skip button 4 if it's being held for score check
+  if (!button4Held) {
     readButtons();
+  } else {
+    // Still read other buttons, just not button 4
+    for (uint8_t i = 0; i < COLS; i++) {
+      if (i == 3) continue;  // Skip button 4
+      uint8_t pin = BUTTON_START_PIN + i;
+      bool reading = !digitalRead(pin);
+      if (reading && !buttonState[i]) {
+        if (currentTime - lastButtonPress[i] > DEBOUNCE_DELAY) {
+          lastButtonPress[i] = currentTime;
+          buttonState[i] = true;
+          handleButtonPress(i);
+        }
+      } else if (!reading) {
+        buttonState[i] = false;
+      }
+    }
   }
 
   // Update display based on game state
