@@ -411,8 +411,8 @@ void displayScore() {
     leds[i] = COLOR_OFF;
   }
 
-  // Display Player 1 score on bottom rows
-  // Each point = one LED, fill row by row from bottom (row 0, 1, 2)
+  // Display Player 1 score on bottom rows (rows 0, 1, 2)
+  // Each point = one LED, fill row by row from bottom, left to right
   uint8_t p1Points = min(scorePlayer1, (uint16_t)(COLS * 3));  // Max 21 LEDs (3 rows)
   for (uint8_t i = 0; i < p1Points; i++) {
     uint8_t row = i / COLS;
@@ -424,11 +424,12 @@ void displayScore() {
   }
 
   // Display Player 2 score on top rows (rows 3, 4, 5)
+  // Same pattern: fill from row 3 upward, left to right
   uint8_t p2Points = min(scorePlayer2, (uint16_t)(COLS * 3));  // Max 21 LEDs (3 rows)
   for (uint8_t i = 0; i < p2Points; i++) {
-    uint8_t row = 5 - (i / COLS);  // Start from top (row 5)
+    uint8_t row = 3 + (i / COLS);  // Start from row 3, go up
     uint8_t col = i % COLS;
-    if (row >= 3) {
+    if (row < 6) {
       uint8_t ledIdx = getLedIndex(row, col);
       leds[ledIdx] = COLOR_PLAYER2;
     }
