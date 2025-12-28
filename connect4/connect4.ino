@@ -1257,15 +1257,15 @@ void setup() {
   blinkState = false;
   FastLED.show();
 
-  // Check if button 7 is pressed at startup for AI mode
+  // Check if button 1 or button 7 is pressed at startup for AI mode
   delay(100);  // Small delay to stabilize button reading
-  if (!digitalRead(BUTTON_START_PIN + 6)) {  // Button 7 (pin 9) pressed
+  if (!digitalRead(BUTTON_START_PIN + 0) || !digitalRead(BUTTON_START_PIN + 6)) {  // Button 1 (pin 3) or Button 7 (pin 9) pressed
     // AI mode selected
     aiMode = true;
     Serial.println("*** MODE SOLO (AI) SELECTIONNE ***");
 
     // Wait for button to be released before starting level selection
-    while (!digitalRead(BUTTON_START_PIN + 6)) {
+    while (!digitalRead(BUTTON_START_PIN + 0) || !digitalRead(BUTTON_START_PIN + 6)) {
       delay(10);
     }
     delay(100);  // Extra delay after release
