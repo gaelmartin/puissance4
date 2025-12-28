@@ -554,7 +554,7 @@ void displayModeSelection(uint8_t mode, bool blinkOff) {
   }
 
   // Light up LEDs based on mode - triangular pattern starting from col 2
-  // Mode 0: col 0 = 1 LED
+  // Mode 0: col 0 = 1 LED (white)
   // Mode 1: col 0 = 1 LED, col 1 = 1 LED
   // Mode 2: col 0 = 1 LED, col 1 = 1 LED, col 2 = 2 LEDs
   // Mode 3: col 0 = 1 LED, col 1 = 1 LED, col 2 = 2 LEDs, col 3 = 3 LEDs
@@ -569,7 +569,8 @@ void displayModeSelection(uint8_t mode, bool blinkOff) {
     if (numRows > ROWS) numRows = ROWS;
     for (uint8_t row = 0; row < numRows; row++) {
       uint8_t ledIdx = getLedIndex(row, col);
-      leds[ledIdx] = COLOR_MODE;
+      // Mode 0 = white, others = blue
+      leds[ledIdx] = (mode == 0) ? COLOR_CURSOR : COLOR_MODE;
     }
   }
 
