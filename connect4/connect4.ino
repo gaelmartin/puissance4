@@ -89,9 +89,10 @@ bool drawBlinkState = false;
 #define WIN_DISPLAY_TIME   3000
 #define SCORE_HOLD_TIME    3000  // Time to hold button 3 to show score
 
-// Button 3 hold tracking for score display
-unsigned long button3HoldStart = 0;
+// Button 4 hold tracking for score display
+unsigned long button4HoldStart = 0;
 bool showingHoldScore = false;
+bool button4WasHeldForScore = false;  // Track if button was held long enough for score
 
 // Convert grid position (row, col) to LED index
 // Handles the zigzag pattern
@@ -488,22 +489,21 @@ void animateGrandWin() {
   }
 }
 
-// Check if button 3 is held to show score (only during play)
-// Returns true if button 3 is being held (to block normal button processing)
-bool checkButton3Hold() {
-  bool btn3Pressed = !digitalRead(BUTTON_START_PIN + 2);  // Button 3 (index 2, pin 5)
+// Check if button 4 is held to show score (only during play)
+// Returns true only if showing score (to block normal button processing)
+bool checkButton4Hold() {
+  bool btn4Pressed = !digitalRead(BUTTON_START_PIN + 3);  // Button 4 (index 3, pin 6)
 
   if (gameState == STATE_PLAYING) {
-    if (btn3Pressed) {
-      if (button3HoldStart == 0) {
+    if (btn4Pressed) {
+      if (button4HoldStart == 0) {
         // Start tracking hold time
-        button3HoldStart = millis();
-      } else if (millis() - button3HoldStart >= SCORE_HOLD_TIME) {
+        button4HoldStart = millis();
+      } else if (millis() - button4HoldStart >= SCORE_HOLD_TIME) {
         // Held long enough, show score
         showingHoldScore = true;
+        button4WasHeldForScore = true;
       }
-      // Block normal button processing while button 3 is held
-      return true;
     } else {
       // Button released
       if (showingHoldScore) {
@@ -511,10 +511,12 @@ bool checkButton3Hold() {
         showingHoldScore = false;
         updateDisplay();
       }
-      button3HoldStart = 0;
+      button4HoldStart = 0;
+      button4WasHeldForScore = false;
     }
   }
-  return false;
+  // Only block button processing if actually showing score
+  return showingHoldScore;
 }
 
 // Display score while holding button (same as displayScore but no auto-exit)
@@ -613,11 +615,11 @@ void loop() {
     blinkState = !blinkState;
   }
 
-  // Check button 3 hold for score display
-  bool button3Held = checkButton3Hold();
+  // Check button 4 hold for score display
+  bool button4ShowingScore = checkButton4Hold();
 
-  // Read buttons (skip if button 3 is held to avoid dropping piece)
-  if (!button3Held) {
+  // Read buttons (skip only if showing score)
+  if (!button4ShowingScore) {
     readButtons();
   }
 
