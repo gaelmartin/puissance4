@@ -429,6 +429,67 @@ uint8_t countInDirection(uint8_t row, uint8_t col, int8_t dRow, int8_t dCol, uin
   return count;
 }
 
+// AI: Check if placing at position creates a win (without modifying winningCells permanently)
+bool aiCheckWin(uint8_t row, uint8_t col, uint8_t player) {
+  // Check horizontal
+  for (int8_t startCol = max(0, (int8_t)col - 3); startCol <= min((int8_t)COLS - 4, (int8_t)col); startCol++) {
+    bool found = true;
+    for (int8_t i = 0; i < 4; i++) {
+      if (board[row][startCol + i] != player) {
+        found = false;
+        break;
+      }
+    }
+    if (found) return true;
+  }
+
+  // Check vertical
+  if (row >= 3) {
+    bool found = true;
+    for (int8_t i = 0; i < 4; i++) {
+      if (board[row - i][col] != player) {
+        found = false;
+        break;
+      }
+    }
+    if (found) return true;
+  }
+
+  // Check diagonal up-right
+  for (int8_t offset = -3; offset <= 0; offset++) {
+    int8_t startRow = row + offset;
+    int8_t startCol = col + offset;
+    if (startRow >= 0 && startRow <= ROWS - 4 && startCol >= 0 && startCol <= COLS - 4) {
+      bool found = true;
+      for (int8_t i = 0; i < 4; i++) {
+        if (board[startRow + i][startCol + i] != player) {
+          found = false;
+          break;
+        }
+      }
+      if (found) return true;
+    }
+  }
+
+  // Check diagonal up-left
+  for (int8_t offset = -3; offset <= 0; offset++) {
+    int8_t startRow = row + offset;
+    int8_t startCol = col - offset;
+    if (startRow >= 0 && startRow <= ROWS - 4 && startCol >= 3 && startCol < COLS) {
+      bool found = true;
+      for (int8_t i = 0; i < 4; i++) {
+        if (board[startRow + i][startCol - i] != player) {
+          found = false;
+          break;
+        }
+      }
+      if (found) return true;
+    }
+  }
+
+  return false;
+}
+
 // AI: Evaluate a column position for potential wins/blocks
 // Returns score: higher is better
 int16_t evaluatePosition(uint8_t col, uint8_t player) {
@@ -442,29 +503,15 @@ int16_t evaluatePosition(uint8_t col, uint8_t player) {
   board[row][col] = player;
 
   // Check if this wins the game
-  if (checkWin(player)) {
+  if (aiCheckWin(row, col, player)) {
     board[row][col] = EMPTY;
     return 1000;  // Winning move!
   }
 
-  // Reset winning cells
-  for (uint8_t r = 0; r < ROWS; r++) {
-    for (uint8_t c = 0; c < COLS; c++) {
-      winningCells[r][c] = false;
-    }
-  }
-
   // Check if this blocks opponent's win
   board[row][col] = opponent;
-  if (checkWin(opponent)) {
+  if (aiCheckWin(row, col, opponent)) {
     score += 500;  // Must block!
-  }
-
-  // Reset winning cells
-  for (uint8_t r = 0; r < ROWS; r++) {
-    for (uint8_t c = 0; c < COLS; c++) {
-      winningCells[r][c] = false;
-    }
   }
 
   board[row][col] = player;
