@@ -104,6 +104,10 @@ unsigned long modeSelectStart = 0;  // When mode selection started
 unsigned long modeConfirmStart = 0;  // When mode was selected (for confirmation display)
 bool modeConfirmed = false;  // Whether a mode has been selected
 
+// AI opponent mode
+bool aiMode = false;  // true if playing against computer
+#define AI_MOVE_DELAY 800  // Delay before AI makes a move (ms)
+
 // Time limits for each mode (in milliseconds), 0 = no limit
 const uint16_t modeTimes[7] = {0, 10000, 8000, 6000, 4000, 3000, 2000};
 
@@ -119,6 +123,10 @@ unsigned long scorePauseStart = 0;  // When score display started (to pause time
 #define BLINK_FAST      150   // Fast blink when 50% time left
 #define BLINK_FASTER    80    // Faster blink when 25% time left
 #define BLINK_URGENT    40    // Urgent blink when 10% time left
+
+// AI timing
+unsigned long aiMoveTime = 0;  // When AI should make its move
+bool aiThinking = false;  // AI is thinking about its move
 
 // Convert grid position (row, col) to LED index
 // Handles the zigzag pattern
@@ -406,6 +414,142 @@ bool checkDraw() {
   return true;
 }
 
+// AI: Count threats in a direction for a player
+uint8_t countInDirection(uint8_t row, uint8_t col, int8_t dRow, int8_t dCol, uint8_t player) {
+  uint8_t count = 0;
+  int8_t r = row;
+  int8_t c = col;
+
+  while (r >= 0 && r < ROWS && c >= 0 && c < COLS && board[r][c] == player) {
+    count++;
+    r += dRow;
+    c += dCol;
+  }
+
+  return count;
+}
+
+// AI: Evaluate a column position for potential wins/blocks
+// Returns score: higher is better
+int16_t evaluatePosition(uint8_t col, uint8_t player) {
+  int8_t row = findEmptyRow(col);
+  if (row < 0) return -1000;  // Column full
+
+  int16_t score = 0;
+  uint8_t opponent = (player == PLAYER1) ? PLAYER2 : PLAYER1;
+
+  // Temporarily place piece
+  board[row][col] = player;
+
+  // Check if this wins the game
+  if (checkWin(player)) {
+    board[row][col] = EMPTY;
+    return 1000;  // Winning move!
+  }
+
+  // Reset winning cells
+  for (uint8_t r = 0; r < ROWS; r++) {
+    for (uint8_t c = 0; c < COLS; c++) {
+      winningCells[r][c] = false;
+    }
+  }
+
+  // Check if this blocks opponent's win
+  board[row][col] = opponent;
+  if (checkWin(opponent)) {
+    score += 500;  // Must block!
+  }
+
+  // Reset winning cells
+  for (uint8_t r = 0; r < ROWS; r++) {
+    for (uint8_t c = 0; c < COLS; c++) {
+      winningCells[r][c] = false;
+    }
+  }
+
+  board[row][col] = player;
+
+  // Check for 3-in-a-row opportunities
+  // Horizontal
+  uint8_t leftCount = countInDirection(row, col, 0, -1, player);
+  uint8_t rightCount = countInDirection(row, col, 0, 1, player);
+  if (leftCount + rightCount - 1 >= 3) score += 50;
+
+  // Vertical
+  uint8_t downCount = countInDirection(row, col, -1, 0, player);
+  if (downCount >= 3) score += 50;
+
+  // Diagonal down-right
+  uint8_t diagDR1 = countInDirection(row, col, -1, -1, player);
+  uint8_t diagDR2 = countInDirection(row, col, 1, 1, player);
+  if (diagDR1 + diagDR2 - 1 >= 3) score += 50;
+
+  // Diagonal down-left
+  uint8_t diagDL1 = countInDirection(row, col, -1, 1, player);
+  uint8_t diagDL2 = countInDirection(row, col, 1, -1, player);
+  if (diagDL1 + diagDL2 - 1 >= 3) score += 50;
+
+  // Prefer center columns
+  score += (3 - abs((int8_t)col - 3)) * 3;
+
+  // Prefer building on existing pieces
+  if (row > 0) score += 5;
+
+  // Remove temporary piece
+  board[row][col] = EMPTY;
+
+  return score;
+}
+
+// AI: Choose best column to play
+uint8_t aiChooseColumn() {
+  int16_t bestScore = -2000;
+  uint8_t bestCol = 3;  // Default to center
+  uint8_t validCols[COLS];
+  uint8_t validCount = 0;
+
+  // Evaluate all columns
+  for (uint8_t c = 0; c < COLS; c++) {
+    if (findEmptyRow(c) >= 0) {
+      int16_t score = evaluatePosition(c, PLAYER2);  // AI is always PLAYER2
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestCol = c;
+        validCount = 1;
+        validCols[0] = c;
+      } else if (score == bestScore) {
+        validCols[validCount++] = c;
+      }
+    }
+  }
+
+  // If multiple columns have same score, pick randomly
+  if (validCount > 1) {
+    bestCol = validCols[random(validCount)];
+  }
+
+  return bestCol;
+}
+
+// AI: Make a move
+void aiMakeMove() {
+  if (currentPlayer != PLAYER2 || !aiMode || gameState != STATE_PLAYING) {
+    aiThinking = false;
+    return;
+  }
+
+  uint8_t col = aiChooseColumn();
+
+  Serial.print("AI joue colonne: ");
+  Serial.println(col + 1);
+
+  dropPiece(col);
+  turnStartTime = millis();
+  updateDisplay();
+  aiThinking = false;
+}
+
 // Drop a piece in a column
 bool dropPiece(uint8_t col) {
   int8_t row = findEmptyRow(col);
@@ -470,6 +614,11 @@ void handleButtonPress(uint8_t col) {
       selectMode(col);
     }
   } else if (gameState == STATE_PLAYING) {
+    // In AI mode, only allow human player (PLAYER1) to play
+    if (aiMode && currentPlayer == PLAYER2) {
+      return;  // Block input during AI turn
+    }
+
     // Move cursor to this column and drop piece
     cursorCol = col;
     dropPiece(col);
@@ -836,12 +985,33 @@ void setup() {
   // Initialize random seed
   randomSeed(analogRead(0));
 
-  // Startup animation - alternate yellow and red
-  for (uint8_t i = 0; i < NUM_LEDS; i++) {
-    leds[i] = (i % 2 == 0) ? COLOR_PLAYER2 : COLOR_PLAYER1;  // Yellow/Red alternating
-    FastLED.show();
-    delay(30);
-    leds[i] = COLOR_OFF;
+  // Check if button 1 is pressed at startup for AI mode
+  delay(100);  // Small delay to stabilize button reading
+  if (!digitalRead(BUTTON_START_PIN)) {  // Button 1 (pin 3) pressed
+    aiMode = true;
+    Serial.println("*** MODE AI ACTIVE - Joueur vs Ordinateur ***");
+
+    // Special AI mode animation - purple blink
+    for (uint8_t i = 0; i < 3; i++) {
+      for (uint8_t j = 0; j < NUM_LEDS; j++) {
+        leds[j] = CRGB::Purple;
+      }
+      FastLED.show();
+      delay(200);
+      for (uint8_t j = 0; j < NUM_LEDS; j++) {
+        leds[j] = COLOR_OFF;
+      }
+      FastLED.show();
+      delay(200);
+    }
+  } else {
+    // Startup animation - alternate yellow and red
+    for (uint8_t i = 0; i < NUM_LEDS; i++) {
+      leds[i] = (i % 2 == 0) ? COLOR_PLAYER2 : COLOR_PLAYER1;  // Yellow/Red alternating
+      FastLED.show();
+      delay(30);
+      leds[i] = COLOR_OFF;
+    }
   }
 
   // Clear all LEDs and reset blink state
@@ -851,8 +1021,18 @@ void setup() {
   blinkState = false;
   FastLED.show();
 
-  // Start with mode selection
-  startModeSelection();
+  // Start with mode selection or directly to game if AI mode
+  if (aiMode) {
+    // AI mode: skip mode selection, go directly to game with no time limit
+    gameMode = 0;
+    gameState = STATE_PLAYING;
+    turnStartTime = millis();
+    updateDisplay();
+    Serial.println("Mode 0 (pas de limite) - Demarrage du jeu!");
+  } else {
+    // Normal mode: show mode selection
+    startModeSelection();
+  }
 }
 
 void loop() {
@@ -891,6 +1071,17 @@ void loop() {
 
   // Check turn timer for auto-drop
   checkTurnTimer();
+
+  // AI turn handling
+  if (aiMode && currentPlayer == PLAYER2 && gameState == STATE_PLAYING && !aiThinking) {
+    // Start AI thinking
+    aiThinking = true;
+    aiMoveTime = millis() + AI_MOVE_DELAY;
+  }
+
+  if (aiThinking && millis() >= aiMoveTime) {
+    aiMakeMove();
+  }
 
   // Update display based on game state
   if (showingHoldScore) {
