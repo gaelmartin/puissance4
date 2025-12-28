@@ -147,16 +147,17 @@ void animateWin() {
       }
     }
 
-    // Blink winning positions between white and off
+    // Blink winning positions between green and player color
+    CRGB winnerColor = (board[winPositions[0][0]][winPositions[0][1]] == PLAYER1) ? COLOR_PLAYER1 : COLOR_PLAYER2;
     for (uint8_t i = 0; i < 4; i++) {
       uint8_t r = winPositions[i][0];
       uint8_t c = winPositions[i][1];
       uint8_t ledIdx = getLedIndex(r, c);
 
       if (winBlinkState) {
-        leds[ledIdx] = COLOR_CURSOR;  // Flash white
+        leds[ledIdx] = CRGB::Green;
       } else {
-        leds[ledIdx] = COLOR_OFF;  // Turn off
+        leds[ledIdx] = winnerColor;
       }
     }
     FastLED.show();
