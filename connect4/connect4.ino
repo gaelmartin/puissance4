@@ -26,12 +26,11 @@
 #define ROWS 6
 
 // Game states
-#define STATE_PLAYING    0
-#define STATE_WIN        1
-#define STATE_DRAW       2
-#define STATE_SCORE      3
-#define STATE_GRAND_WIN  4
-#define STATE_MENU_SCORE 5
+#define STATE_PLAYING   0
+#define STATE_WIN       1
+#define STATE_DRAW      2
+#define STATE_SCORE     3
+#define STATE_GRAND_WIN 4
 
 // Points to win the match
 #define POINTS_TO_WIN   7
@@ -51,7 +50,6 @@
 #define DEBOUNCE_DELAY 50
 #define BLINK_INTERVAL 300
 #define DROP_DELAY     80
-#define COMBO_HOLD_TIME 1000  // Time to hold buttons 2+4 for menu
 
 // LED array
 CRGB leds[NUM_LEDS];
@@ -89,11 +87,6 @@ bool drawBlinkState = false;
 // Display durations
 #define SCORE_DISPLAY_TIME 3000
 #define WIN_DISPLAY_TIME   3000
-
-// Combo button tracking (buttons 2 and 4 = indices 1 and 3)
-unsigned long comboStartTime = 0;
-bool comboActive = false;
-uint8_t previousGameState = STATE_PLAYING;  // To restore after menu score
 
 // Convert grid position (row, col) to LED index
 // Handles the zigzag pattern
@@ -490,69 +483,6 @@ void animateGrandWin() {
   }
 }
 
-// Check for combo button press (buttons 2 and 4 held for 1 second)
-void checkComboButtons() {
-  bool btn2 = !digitalRead(BUTTON_START_PIN + 1);  // Button 2 (index 1)
-  bool btn4 = !digitalRead(BUTTON_START_PIN + 3);  // Button 4 (index 3)
-
-  if (btn2 && btn4) {
-    if (!comboActive) {
-      // Start tracking combo
-      comboActive = true;
-      comboStartTime = millis();
-    } else if (millis() - comboStartTime >= COMBO_HOLD_TIME) {
-      // Combo held long enough
-      if (gameState == STATE_MENU_SCORE) {
-        // Already showing score, reset the match
-        scorePlayer1 = 0;
-        scorePlayer2 = 0;
-        Serial.println("Match reinitialise!");
-        Serial.println("Score: 0 - 0");
-        resetGame();
-      } else {
-        // Show score menu
-        previousGameState = gameState;
-        gameState = STATE_MENU_SCORE;
-        Serial.println("Affichage du score...");
-      }
-      // Reset combo to prevent repeated triggers
-      comboActive = false;
-      comboStartTime = millis();  // Prevent immediate re-trigger
-    }
-  } else {
-    // Buttons released
-    comboActive = false;
-  }
-}
-
-// Display score in menu mode (same display as STATE_SCORE but no auto-exit)
-void displayMenuScore() {
-  // Clear all LEDs
-  for (uint8_t i = 0; i < NUM_LEDS; i++) {
-    leds[i] = COLOR_OFF;
-  }
-
-  // Display Player 1 score on bottom rows (rows 0, 1, 2)
-  uint8_t p1Points = min(scorePlayer1, (uint16_t)COLS);
-  for (uint8_t col = 0; col < p1Points; col++) {
-    for (uint8_t row = 0; row < 3; row++) {
-      uint8_t ledIdx = getLedIndex(row, col);
-      leds[ledIdx] = COLOR_PLAYER1;
-    }
-  }
-
-  // Display Player 2 score on top rows (rows 3, 4, 5)
-  uint8_t p2Points = min(scorePlayer2, (uint16_t)COLS);
-  for (uint8_t col = 0; col < p2Points; col++) {
-    for (uint8_t row = 3; row < 6; row++) {
-      uint8_t ledIdx = getLedIndex(row, col);
-      leds[ledIdx] = COLOR_PLAYER2;
-    }
-  }
-
-  FastLED.show();
-}
-
 // Draw animation (alternating colors)
 void animateDraw() {
   unsigned long currentTime = millis();
@@ -621,13 +551,8 @@ void loop() {
     blinkState = !blinkState;
   }
 
-  // Check for combo button press (buttons 2+4)
-  checkComboButtons();
-
-  // Read buttons (only if not in menu score mode)
-  if (gameState != STATE_MENU_SCORE) {
-    readButtons();
-  }
+  // Read buttons
+  readButtons();
 
   // Update display based on game state
   switch (gameState) {
@@ -645,9 +570,6 @@ void loop() {
       break;
     case STATE_GRAND_WIN:
       animateGrandWin();
-      break;
-    case STATE_MENU_SCORE:
-      displayMenuScore();
       break;
   }
 
