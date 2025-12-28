@@ -26,12 +26,13 @@
 #define ROWS 6
 
 // Game states
-#define STATE_MODE_SELECT 0
-#define STATE_PLAYING     1
-#define STATE_WIN         2
-#define STATE_DRAW        3
-#define STATE_SCORE       4
-#define STATE_GRAND_WIN   5
+#define STATE_MODE_SELECT    0
+#define STATE_AI_LEVEL_SELECT 1
+#define STATE_PLAYING        2
+#define STATE_WIN            3
+#define STATE_DRAW           4
+#define STATE_SCORE          5
+#define STATE_GRAND_WIN      6
 
 // Points to win the match
 #define POINTS_TO_WIN   7
@@ -60,7 +61,7 @@ uint8_t board[ROWS][COLS];
 
 // Game state
 uint8_t currentPlayer = PLAYER1;
-uint8_t gameState = STATE_PLAYING;
+uint8_t gameState = STATE_MODE_SELECT;
 uint8_t cursorCol = 3;  // Start cursor in middle
 
 // Win tracking - use a grid to mark all winning positions
@@ -106,6 +107,7 @@ bool modeConfirmed = false;  // Whether a mode has been selected
 
 // AI opponent mode
 bool aiMode = false;  // true if playing against computer
+uint8_t aiLevel = 1;  // AI difficulty level: 1-7 (très facile à expert)
 #define AI_MOVE_DELAY 800  // Delay before AI makes a move (ms)
 
 // Time limits for each mode (in milliseconds), 0 = no limit
@@ -502,45 +504,140 @@ int16_t evaluatePosition(uint8_t col, uint8_t player) {
   // Temporarily place piece
   board[row][col] = player;
 
-  // Check if this wins the game
-  if (aiCheckWin(row, col, player)) {
-    board[row][col] = EMPTY;
-    return 1000;  // Winning move!
+  // NIVEAU 1+: Check if this wins the game (everyone should take a winning move!)
+  if (aiLevel >= 1) {
+    if (aiCheckWin(row, col, player)) {
+      board[row][col] = EMPTY;
+      return 1000;  // Winning move!
+    }
   }
 
-  // Check if this blocks opponent's win
-  board[row][col] = opponent;
-  if (aiCheckWin(row, col, opponent)) {
-    score += 500;  // Must block!
+  // NIVEAU 2+: Prefer center column slightly
+  if (aiLevel >= 2) {
+    score += (3 - abs((int8_t)col - 3)) * 2;
   }
 
-  board[row][col] = player;
+  // NIVEAU 3+: Check if this blocks opponent's win
+  if (aiLevel >= 3) {
+    board[row][col] = opponent;
+    if (aiCheckWin(row, col, opponent)) {
+      score += 500;  // Must block!
+    }
+    board[row][col] = player;
+  }
 
-  // Check for 3-in-a-row opportunities
-  // Horizontal
-  uint8_t leftCount = countInDirection(row, col, 0, -1, player);
-  uint8_t rightCount = countInDirection(row, col, 0, 1, player);
-  if (leftCount + rightCount - 1 >= 3) score += 50;
+  // NIVEAU 4+: Check for 2-in-a-row opportunities (build on existing pieces)
+  if (aiLevel >= 4) {
+    // Horizontal
+    uint8_t leftCount = countInDirection(row, col, 0, -1, player);
+    uint8_t rightCount = countInDirection(row, col, 0, 1, player);
+    if (leftCount + rightCount - 1 >= 2) score += 20;
 
-  // Vertical
-  uint8_t downCount = countInDirection(row, col, -1, 0, player);
-  if (downCount >= 3) score += 50;
+    // Vertical
+    uint8_t downCount = countInDirection(row, col, -1, 0, player);
+    if (downCount >= 2) score += 20;
 
-  // Diagonal down-right
-  uint8_t diagDR1 = countInDirection(row, col, -1, -1, player);
-  uint8_t diagDR2 = countInDirection(row, col, 1, 1, player);
-  if (diagDR1 + diagDR2 - 1 >= 3) score += 50;
+    // Diagonal down-right
+    uint8_t diagDR1 = countInDirection(row, col, -1, -1, player);
+    uint8_t diagDR2 = countInDirection(row, col, 1, 1, player);
+    if (diagDR1 + diagDR2 - 1 >= 2) score += 20;
 
-  // Diagonal down-left
-  uint8_t diagDL1 = countInDirection(row, col, -1, 1, player);
-  uint8_t diagDL2 = countInDirection(row, col, 1, -1, player);
-  if (diagDL1 + diagDL2 - 1 >= 3) score += 50;
+    // Diagonal down-left
+    uint8_t diagDL1 = countInDirection(row, col, -1, 1, player);
+    uint8_t diagDL2 = countInDirection(row, col, 1, -1, player);
+    if (diagDL1 + diagDL2 - 1 >= 2) score += 20;
+  }
 
-  // Prefer center columns
-  score += (3 - abs((int8_t)col - 3)) * 3;
+  // NIVEAU 5+: Check for 3-in-a-row opportunities
+  if (aiLevel >= 5) {
+    // Horizontal
+    uint8_t leftCount = countInDirection(row, col, 0, -1, player);
+    uint8_t rightCount = countInDirection(row, col, 0, 1, player);
+    if (leftCount + rightCount - 1 >= 3) score += 50;
 
-  // Prefer building on existing pieces
-  if (row > 0) score += 5;
+    // Vertical
+    uint8_t downCount = countInDirection(row, col, -1, 0, player);
+    if (downCount >= 3) score += 50;
+
+    // Diagonal down-right
+    uint8_t diagDR1 = countInDirection(row, col, -1, -1, player);
+    uint8_t diagDR2 = countInDirection(row, col, 1, 1, player);
+    if (diagDR1 + diagDR2 - 1 >= 3) score += 50;
+
+    // Diagonal down-left
+    uint8_t diagDL1 = countInDirection(row, col, -1, 1, player);
+    uint8_t diagDL2 = countInDirection(row, col, 1, -1, player);
+    if (diagDL1 + diagDL2 - 1 >= 3) score += 50;
+  }
+
+  // NIVEAU 6+: Block opponent's 3-in-a-row and prefer stable positions
+  if (aiLevel >= 6) {
+    if (row > 0) score += 5;
+
+    // Block opponent's 3-in-a-row
+    board[row][col] = opponent;
+    uint8_t oppLeftCount = countInDirection(row, col, 0, -1, opponent);
+    uint8_t oppRightCount = countInDirection(row, col, 0, 1, opponent);
+    if (oppLeftCount + oppRightCount - 1 >= 3) score += 40;
+
+    uint8_t oppDownCount = countInDirection(row, col, -1, 0, opponent);
+    if (oppDownCount >= 3) score += 40;
+
+    board[row][col] = player;
+  }
+
+  // NIVEAU 7 (EXPERT): Set traps - create forks
+  if (aiLevel >= 7 && row < ROWS - 1) {
+    // Check if this move creates a "fork" (two ways to win)
+    uint8_t winningThreats = 0;
+
+    // Simulate placing another piece on top
+    board[row + 1][col] = player;
+
+    // Check all positions for potential wins
+    for (int8_t c = 0; c < COLS; c++) {
+      int8_t r = findEmptyRow(c);
+      if (r >= 0) {
+        board[r][c] = player;
+        if (aiCheckWin(r, c, player)) {
+          winningThreats++;
+        }
+        board[r][c] = EMPTY;
+      }
+    }
+
+    board[row + 1][col] = EMPTY;
+
+    // If this creates multiple winning opportunities, it's a trap!
+    if (winningThreats >= 2) {
+      score += 200;  // High value for setting a trap
+    }
+
+    // Also check if opponent could create a trap here
+    board[row][col] = opponent;
+    if (row < ROWS - 1) {
+      board[row + 1][col] = opponent;
+      uint8_t opponentThreats = 0;
+
+      for (int8_t c = 0; c < COLS; c++) {
+        int8_t r = findEmptyRow(c);
+        if (r >= 0) {
+          board[r][c] = opponent;
+          if (aiCheckWin(r, c, opponent)) {
+            opponentThreats++;
+          }
+          board[r][c] = EMPTY;
+        }
+      }
+
+      board[row + 1][col] = EMPTY;
+
+      // Block opponent's trap setup
+      if (opponentThreats >= 2) {
+        score += 150;
+      }
+    }
+  }
 
   // Remove temporary piece
   board[row][col] = EMPTY;
@@ -552,8 +649,8 @@ int16_t evaluatePosition(uint8_t col, uint8_t player) {
 uint8_t aiChooseColumn() {
   int16_t bestScore = -2000;
   uint8_t bestCol = 3;  // Default to center
-  uint8_t validCols[COLS];
-  uint8_t validCount = 0;
+  uint8_t bestCols[COLS];
+  uint8_t bestCount = 0;
 
   // Evaluate all columns
   for (uint8_t c = 0; c < COLS; c++) {
@@ -563,17 +660,17 @@ uint8_t aiChooseColumn() {
       if (score > bestScore) {
         bestScore = score;
         bestCol = c;
-        validCount = 1;
-        validCols[0] = c;
+        bestCount = 1;
+        bestCols[0] = c;
       } else if (score == bestScore) {
-        validCols[validCount++] = c;
+        bestCols[bestCount++] = c;
       }
     }
   }
 
   // If multiple columns have same score, pick randomly
-  if (validCount > 1) {
-    bestCol = validCols[random(validCount)];
+  if (bestCount > 1) {
+    bestCol = bestCols[random(bestCount)];
   }
 
   return bestCol;
@@ -660,6 +757,11 @@ void handleButtonPress(uint8_t col) {
     if (!modeConfirmed) {
       selectMode(col);
     }
+  } else if (gameState == STATE_AI_LEVEL_SELECT) {
+    // Select AI level based on button (0-6)
+    if (!modeConfirmed) {
+      selectAILevel(col);
+    }
   } else if (gameState == STATE_PLAYING) {
     // In AI mode, only allow human player (PLAYER1) to play
     if (aiMode && currentPlayer == PLAYER2) {
@@ -672,7 +774,7 @@ void handleButtonPress(uint8_t col) {
     turnStartTime = millis();  // Reset timer for next player
     updateDisplay();
   } else if (gameState == STATE_GRAND_WIN) {
-    // Reset everything for a new match - go to mode selection
+    // Reset everything for a new match
     scorePlayer1 = 0;
     scorePlayer2 = 0;
     currentPlayer = PLAYER1;  // Reset to player 1 for new big game
@@ -686,7 +788,14 @@ void handleButtonPress(uint8_t col) {
     }
     Serial.println("Nouvelle partie!");
     Serial.println("Score reinitialise.");
-    startModeSelection();
+
+    // Return to mode selection (or AI level selection if in AI mode)
+    if (aiMode) {
+      Serial.println("Retour a la selection de niveau AI...");
+      startAILevelSelection();
+    } else {
+      startModeSelection();
+    }
   } else if (gameState == STATE_WIN || gameState == STATE_DRAW) {
     // Check for grand winner immediately
     if (scorePlayer1 >= POINTS_TO_WIN) {
@@ -742,6 +851,105 @@ void displayScore() {
   if (millis() - scoreDisplayStart >= SCORE_DISPLAY_TIME) {
     resetGame();
     turnStartTime = millis();  // Reset timer for new round
+  }
+}
+
+// Display AI level selection screen
+void displayAILevelSelection(uint8_t level, bool blinkOff) {
+  // Clear all LEDs
+  for (uint8_t i = 0; i < NUM_LEDS; i++) {
+    leds[i] = COLOR_OFF;
+  }
+
+  // Light up LEDs based on AI level - triangular pattern
+  // Same as mode selection but with purple color
+  for (uint8_t col = 0; col <= level; col++) {
+    uint8_t numRows;
+    if (col <= 1) {
+      numRows = 1;  // col 0 and 1 always have 1 LED
+    } else {
+      numRows = col;  // col 2 = 2, col 3 = 3, etc.
+    }
+    if (numRows > ROWS) numRows = ROWS;
+    for (uint8_t row = 0; row < numRows; row++) {
+      uint8_t ledIdx = getLedIndex(row, col);
+      if (level == 0) {
+        // Level 1 (index 0): purple LED, blinks
+        if (!blinkOff) {
+          leds[ledIdx] = CRGB::Purple;
+        }
+      } else {
+        // Level > 1: col 0 is always purple (no blink), rest is purple (blinks)
+        if (col == 0) {
+          leds[ledIdx] = CRGB::Purple;  // Always on, no blink
+        } else if (!blinkOff) {
+          leds[ledIdx] = CRGB::Purple;  // Purple, blinks
+        }
+      }
+    }
+  }
+
+  FastLED.show();
+}
+
+// Start AI level selection process
+void startAILevelSelection() {
+  gameState = STATE_AI_LEVEL_SELECT;
+  modeSelectStart = millis();
+  modeConfirmed = false;
+  aiLevel = 1;  // Default to level 1
+  displayAILevelSelection(0, false);
+}
+
+// Handle AI level selection timeout and confirmation
+void handleAILevelSelection() {
+  unsigned long currentTime = millis();
+
+  if (modeConfirmed) {
+    // Level has been selected, blink for confirmation time
+    if (currentTime - modeConfirmStart >= MODE_CONFIRM_TIME) {
+      // Start the game
+      gameState = STATE_PLAYING;
+      turnStartTime = millis();
+      blinkState = false;
+      updateDisplay();
+      Serial.print("Niveau AI ");
+      Serial.print(aiLevel);
+      Serial.println(" selectionne - Demarrage du jeu!");
+    } else {
+      // Blink the level display during confirmation
+      displayAILevelSelection(aiLevel - 1, !blinkState);
+    }
+  } else {
+    // Check for timeout - default to level 1
+    if (currentTime - modeSelectStart >= MODE_SELECT_TIMEOUT) {
+      aiLevel = 1;
+      modeConfirmed = true;
+      modeConfirmStart = millis();
+      displayAILevelSelection(0, false);
+    }
+  }
+}
+
+// Select an AI level (called when button pressed during level selection)
+void selectAILevel(uint8_t level) {
+  if (level <= 6) {  // 0-6 = levels 1-7
+    aiLevel = level + 1;
+    modeConfirmed = true;
+    modeConfirmStart = millis();
+    displayAILevelSelection(level, false);
+    Serial.print("Niveau AI ");
+    Serial.print(aiLevel);
+    Serial.print(" - ");
+    switch(aiLevel) {
+      case 1: Serial.println("Tres Facile"); break;
+      case 2: Serial.println("Facile"); break;
+      case 3: Serial.println("Moyen"); break;
+      case 4: Serial.println("Peu Difficile"); break;
+      case 5: Serial.println("Difficile"); break;
+      case 6: Serial.println("Tres Difficile"); break;
+      case 7: Serial.println("Expert"); break;
+    }
   }
 }
 
@@ -827,6 +1035,8 @@ void handleModeSelection() {
 void selectMode(uint8_t mode) {
   if (mode <= 6) {
     gameMode = mode;
+    // Normal 2-player mode only
+    aiMode = false;
     modeConfirmed = true;
     modeConfirmStart = millis();
     displayModeSelection(mode, false);
@@ -1032,13 +1242,14 @@ void setup() {
   // Initialize random seed
   randomSeed(analogRead(0));
 
-  // Check if button 1 is pressed at startup for AI mode
+  // Check if button 7 is pressed at startup for AI mode
   delay(100);  // Small delay to stabilize button reading
-  if (!digitalRead(BUTTON_START_PIN)) {  // Button 1 (pin 3) pressed
+  if (!digitalRead(BUTTON_START_PIN + 6)) {  // Button 7 (pin 9) pressed
+    // AI mode selected
     aiMode = true;
-    Serial.println("*** MODE AI ACTIVE - Joueur vs Ordinateur ***");
+    Serial.println("*** MODE SOLO (AI) SELECTIONNE ***");
 
-    // Special AI mode animation - purple blink
+    // Special AI mode animation - purple flash
     for (uint8_t i = 0; i < 3; i++) {
       for (uint8_t j = 0; j < NUM_LEDS; j++) {
         leds[j] = CRGB::Purple;
@@ -1051,7 +1262,20 @@ void setup() {
       FastLED.show();
       delay(200);
     }
+
+    // Clear all LEDs and reset blink state
+    for (uint8_t i = 0; i < NUM_LEDS; i++) {
+      leds[i] = COLOR_OFF;
+    }
+    blinkState = false;
+    FastLED.show();
+
+    // Start AI level selection
+    startAILevelSelection();
   } else {
+    // Normal 2-player mode
+    aiMode = false;
+
     // Startup animation - alternate yellow and red
     for (uint8_t i = 0; i < NUM_LEDS; i++) {
       leds[i] = (i % 2 == 0) ? COLOR_PLAYER2 : COLOR_PLAYER1;  // Yellow/Red alternating
@@ -1059,25 +1283,15 @@ void setup() {
       delay(30);
       leds[i] = COLOR_OFF;
     }
-  }
 
-  // Clear all LEDs and reset blink state
-  for (uint8_t i = 0; i < NUM_LEDS; i++) {
-    leds[i] = COLOR_OFF;
-  }
-  blinkState = false;
-  FastLED.show();
+    // Clear all LEDs and reset blink state
+    for (uint8_t i = 0; i < NUM_LEDS; i++) {
+      leds[i] = COLOR_OFF;
+    }
+    blinkState = false;
+    FastLED.show();
 
-  // Start with mode selection or directly to game if AI mode
-  if (aiMode) {
-    // AI mode: skip mode selection, go directly to game with no time limit
-    gameMode = 0;
-    gameState = STATE_PLAYING;
-    turnStartTime = millis();
-    updateDisplay();
-    Serial.println("Mode 0 (pas de limite) - Demarrage du jeu!");
-  } else {
-    // Normal mode: show mode selection
+    // Start with mode selection
     startModeSelection();
   }
 }
@@ -1137,6 +1351,9 @@ void loop() {
     switch (gameState) {
       case STATE_MODE_SELECT:
         handleModeSelection();
+        break;
+      case STATE_AI_LEVEL_SELECT:
+        handleAILevelSelection();
         break;
       case STATE_PLAYING:
         updateDisplay();
