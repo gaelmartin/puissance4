@@ -67,8 +67,10 @@ bool buttonState[COLS];
 // Animation timing
 unsigned long lastBlinkTime = 0;
 unsigned long lastWinBlinkTime = 0;
+unsigned long lastDrawBlinkTime = 0;
 bool blinkState = false;
 bool winBlinkState = false;
+bool drawBlinkState = false;
 
 // Convert grid position (row, col) to LED index
 // Handles the zigzag pattern
@@ -314,14 +316,14 @@ void handleButtonPress(uint8_t col) {
 // Draw animation (alternating colors)
 void animateDraw() {
   unsigned long currentTime = millis();
-  if (currentTime - lastBlinkTime >= BLINK_INTERVAL * 2) {
-    lastBlinkTime = currentTime;
-    blinkState = !blinkState;
+  if (currentTime - lastDrawBlinkTime >= BLINK_INTERVAL * 2) {
+    lastDrawBlinkTime = currentTime;
+    drawBlinkState = !drawBlinkState;
 
     for (uint8_t r = 0; r < ROWS; r++) {
       for (uint8_t c = 0; c < COLS; c++) {
         uint8_t ledIdx = getLedIndex(r, c);
-        if ((r + c) % 2 == blinkState) {
+        if ((r + c) % 2 == drawBlinkState) {
           leds[ledIdx] = COLOR_PLAYER1;
         } else {
           leds[ledIdx] = COLOR_PLAYER2;
